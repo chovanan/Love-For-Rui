@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>给你的粒子宇宙</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: #07070e;
+      --ink: rgba(255, 255, 255, .92);
+      --muted: rgba(255, 255, 255, .58);
+      --glass: rgba(16, 18, 31, .58);
+      --line: rgba(255, 255, 255, .14);
+      --rose: #ff7eb6;
+      --cyan: #65e5ff;
+      --gold: #ffd27a;
+      --mint: #89ffc4;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 18% 16%, rgba(255, 126, 182, .16), transparent 28%),
+        radial-gradient(circle at 82% 12%, rgba(101, 229, 255, .14), transparent 30%),
+        linear-gradient(160deg, #060711 0%, #0b0a18 42%, #07080d 100%);
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    canvas.webgl {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: fixed;
+      left: clamp(14px, 2.5vw, 28px);
+      right: clamp(14px, 2.5vw, 28px);
+      top: clamp(12px, 2.2vw, 24px);
+      z-index: 10;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      pointer-events: none;
+    }
+
+    .title {
+      min-width: 0;
+      max-width: min(560px, 72vw);
+    }
+
+    .title h1 {
+      margin: 0;
+      color: var(--ink);
+      font-size: clamp(24px, 4.4vw, 56px);
+      line-height: .95;
+      font-weight: 780;
+      letter-spacing: 0;
+      text-shadow: 0 0 34px rgba(255, 126, 182, .24);
+    }
+
+    .title p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: clamp(13px, 1.6vw, 16px);
+      line-height: 1.6;
+    }
+
+    .status {
+      min-width: 142px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--glass);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, .28);
+      color: var(--ink);
+      text-align: right;
+    }
+
+    .status strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.25;
+      color: white;
+    }
+
+    .status span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .dock {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      z-index: 12;
+      width: min(780px, calc(100vw - 28px));
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    button {
+      min-width: 0;
+      height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(16, 18, 31, .64);
+      color: rgba(255, 255, 255, .86);
+      font: inherit;
+      font-size: 13px;
+      letter-spacing: 0;
+      backdrop-filter: blur(18px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .22);
+      transition: transform .18s ease, border-color .18s ease, background .18s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    button:hover, button.active {
+      transform: translateY(-2px);
+      border-color: rgba(255, 126, 182, .72);
+      background: rgba(255, 126, 182, .18);
+    }
+
+    .camera {
+      position: fixed;
+      right: clamp(14px, 2.4vw, 24px);
+      bottom: max(78px, calc(env(safe-area-inset-bottom) + 78px));
+      z-index: 8;
+      width: min(176px, 28vw);
+      aspect-ratio: 4 / 3;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, .06);
+      opacity: .82;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .34);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    .toast {
+      position: fixed;
+      left: clamp(14px, 2.4vw, 24px);
+      bottom: max(78px, calc(env(safe-area-inset-bottom) + 78px));
+      z-index: 11;
+      max-width: min(420px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(11, 12, 24, .72);
+      color: rgba(255, 255, 255, .78);
+      backdrop-filter: blur(18px);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    @media (max-width: 720px) {
+      .hud {
+        align-items: stretch;
+      }
+
+      .title {
+        max-width: calc(100vw - 170px);
+      }
+
+      .title p {
+        display: none;
+      }
+
+      .status {
+        min-width: 128px;
+      }
+
+      .dock {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .camera {
+        width: 120px;
+        bottom: max(122px, calc(env(safe-area-inset-bottom) + 122px));
+      }
+
+      .toast {
+        bottom: max(122px, calc(env(safe-area-inset-bottom) + 122px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="hud">
+    <div class="title">
+      <h1>给你的粒子宇宙</h1>
+      <p>张开手、比耶、握拳、竖食指、点赞，粒子会用物理方式炸开再聚合。</p>
+    </div>
+    <div class="status" aria-live="polite">
+      <strong id="gestureName">正在启动</strong>
+      <span id="gestureHint">请允许摄像头权限</span>
+    </div>
+  </div>
+
+  <div class="dock" aria-label="手动切换形态">
+    <button data-shape="sphere">张手 星球</button>
+    <button data-shape="text">比耶 情话</button>
+    <button data-shape="ring">握拳 圆环</button>
+    <button data-shape="star">食指 星星</button>
+    <button data-shape="heart">点赞 爱心</button>
+    <button data-shape="flower">捏合 花</button>
+  </div>
+
+  <div class="camera">
+    <video id="video" autoplay playsinline muted></video>
+  </div>
+  <div class="toast" id="toast">摄像头不可用时，也可以用下方按钮手动切换。鼠标或手指拖动会吹散粒子。</div>
+
+  <script src="./vendor/three.min.js"></script>
+  <script src="./vendor/hands.js"></script>
+  <script src="./vendor/camera_utils.js"></script>
+  <script>
+    (() => {
+      const COUNT = 16000;
+      const tmp = new THREE.Vector3();
+      const tmp2 = new THREE.Vector3();
+      const pointer = new THREE.Vector3(999, 999, 0);
+      const clock = new THREE.Clock();
+      const app = document.querySelector("#app");
+      const video = document.querySelector("#video");
+      const gestureName = document.querySelector("#gestureName");
+      const gestureHint = document.querySelector("#gestureHint");
+      const toast = document.querySelector("#toast");
+      const buttons = [...document.querySelectorAll("button[data-shape]")];
+
+      const labels = {
+        sphere: ["张手：星球", "掌心靠近会把宇宙推近"],
+        text: ["比耶：情话", "她会看到一行藏在光里的话"],
+        ring: ["握拳：圆环", "攥紧后粒子收束成守护环"],
+        star: ["食指：星星", "指尖像魔法棒一样牵引星光"],
+        heart: ["点赞：爱心", "爱心会轻轻呼吸"],
+        flower: ["捏合：花", "拇指和食指靠近时开花"]
+      };
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x07070e, 0.035);
+
+      const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 200);
+      camera.position.set(0, 0, 24);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.domElement.className = "webgl";
+      app.appendChild(renderer.domElement);
+
+      const positions = new Float32Array(COUNT * 3);
+      const colors = new Float32Array(COUNT * 3);
+      const sizes = new Float32Array(COUNT);
+      const targets = new Float32Array(COUNT * 3);
+      const velocities = new Float32Array(COUNT * 3);
+      const accelerations = new Float32Array(COUNT * 3);
+      const seeds = new Float32Array(COUNT);
+      const palette = [
+        new THREE.Color("#65e5ff"),
+        new THREE.Color("#ff7eb6"),
+        new THREE.Color("#ffd27a"),
+        new THREE.Color("#89ffc4"),
+        new THREE.Color("#f6f7ff")
+      ];
+
+      for (let i = 0; i < COUNT; i++) {
+        const p = randomShell(12 + Math.random() * 16);
+        const k = i * 3;
+        positions[k] = p.x;
+        positions[k + 1] = p.y;
+        positions[k + 2] = p.z;
+        targets[k] = p.x * 0.25;
+        targets[k + 1] = p.y * 0.25;
+        targets[k + 2] = p.z * 0.25;
+        velocities[k] = (Math.random() - .5) * 0.12;
+        velocities[k + 1] = (Math.random() - .5) * 0.12;
+        velocities[k + 2] = (Math.random() - .5) * 0.12;
+        sizes[i] = 0.58 + Math.random() * 0.92;
+        seeds[i] = Math.random() * 1000;
+        const c = palette[(i + Math.floor(Math.random() * palette.length)) % palette.length].clone();
+        c.lerp(new THREE.Color("#ffffff"), Math.random() * .22);
+        colors[k] = c.r;
+        colors[k + 1] = c.g;
+        colors[k + 2] = c.b;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+      geometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
+
+      const material = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true,
+        uniforms: {
+          uTime: { value: 0 },
+          uPixelRatio: { value: Math.min(devicePixelRatio, 2) }
+        },
+        vertexShader: `
+          attribute float size;
+          varying vec3 vColor;
+          varying float vTwinkle;
+          uniform float uTime;
+          uniform float uPixelRatio;
+          void main() {
+            vColor = color;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            vTwinkle = .72 + .28 * sin(uTime * 2.2 + position.x * .22 + position.y * .17);
+            gl_PointSize = size * uPixelRatio * (76.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vColor;
+          varying float vTwinkle;
+          void main() {
+            vec2 uv = gl_PointCoord - .5;
+            float d = length(uv);
+            float core = smoothstep(.5, .08, d);
+            float halo = smoothstep(.5, .0, d) * .32;
+            float alpha = (core + halo) * vTwinkle * .30;
+            if (alpha < .02) discard;
+            gl_FragColor = vec4(vColor, alpha);
+          }
+        `
+      });
+
+      const particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+
+      const bloom = makeStarField(950);
+      scene.add(bloom);
+
+      const state = {
+        shape: "sphere",
+        nextShape: "sphere",
+        lastGesture: "",
+        hand: null,
+        handSpeed: 0,
+        handScale: 1,
+        targetScale: 1,
+        modeLockedUntil: 0,
+        lastPalm: null,
+        manualUntil: 0
+      };
+
+      const targetCache = new Map();
+      setShape("sphere", false);
+      bootHands();
+      bindInput();
+      animate();
+
+      function bindInput() {
+        buttons.forEach((button) => {
+          button.addEventListener("click", () => {
+            state.manualUntil = performance.now() + 2600;
+            setShape(button.dataset.shape, true);
+          });
+        });
+
+        const setPointer = (clientX, clientY, strength = 1) => {
+          pointer.x = (clientX / innerWidth - .5) * 24;
+          pointer.y = -(clientY / innerHeight - .5) * 14;
+          pointer.z = 2.5 * strength;
+        };
+
+        addEventListener("pointermove", (event) => setPointer(event.clientX, event.clientY, 1.2));
+        addEventListener("pointerdown", (event) => {
+          setPointer(event.clientX, event.clientY, 3);
+          storm(0.7);
+        });
+        addEventListener("resize", resize);
+      }
+
+      function resize() {
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+        renderer.setSize(innerWidth, innerHeight);
+        material.uniforms.uPixelRatio.value = Math.min(devicePixelRatio, 2);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.033);
+        const time = clock.elapsedTime;
+        material.uniforms.uTime.value = time;
+
+        state.handScale += (state.targetScale - state.handScale) * (1 - Math.pow(.001, dt));
+        particles.scale.setScalar(state.handScale);
+        particles.rotation.y += dt * (0.06 + state.handSpeed * .014);
+        particles.rotation.x = Math.sin(time * .24) * .07;
+        bloom.rotation.y -= dt * .014;
+        bloom.rotation.x += dt * .006;
+
+        simulate(dt, time);
+        renderer.render(scene, camera);
+      }
+
+      function simulate(dt, time) {
+        const stiffness = 10.5;
+        const damping = Math.pow(0.075, dt);
+        const noiseAmp = .16 + Math.min(state.handSpeed * .018, 1.1);
+        const px = pointer.x;
+        const py = pointer.y;
+        const pz = pointer.z;
+
+        for (let i = 0; i < COUNT; i++) {
+          const k = i * 3;
+          const x = positions[k];
+          const y = positions[k + 1];
+          const z = positions[k + 2];
+          let ax = (targets[k] - x) * stiffness;
+          let ay = (targets[k + 1] - y) * stiffness;
+          let az = (targets[k + 2] - z) * stiffness;
+
+          const swirl = Math.sin(time * .85 + seeds[i] + y * .2) * noiseAmp;
+          ax += -y * .018 * swirl;
+          ay += x * .018 * swirl;
+          az += Math.cos(time * .72 + seeds[i]) * noiseAmp * .22;
+
+          const dx = x - px;
+          const dy = y - py;
+          const dz = z - pz;
+          const dist2 = dx * dx + dy * dy + dz * dz;
+          if (dist2 < 18) {
+            const force = (1 - dist2 / 18) * (34 + state.handSpeed * 3.5);
+            const inv = 1 / Math.sqrt(dist2 + .001);
+            ax += dx * inv * force;
+            ay += dy * inv * force;
+            az += dz * inv * force * .45;
+          }
+
+          accelerations[k] = ax;
+          accelerations[k + 1] = ay;
+          accelerations[k + 2] = az;
+          velocities[k] = (velocities[k] + ax * dt) * damping;
+          velocities[k + 1] = (velocities[k + 1] + ay * dt) * damping;
+          velocities[k + 2] = (velocities[k + 2] + az * dt) * damping;
+          positions[k] += velocities[k] * dt;
+          positions[k + 1] += velocities[k + 1] * dt;
+          positions[k + 2] += velocities[k + 2] * dt;
+        }
+
+        geometry.attributes.position.needsUpdate = true;
+      }
+
+      function setShape(shape, explode = true) {
+        if (!shape || shape === state.shape && performance.now() < state.modeLockedUntil) return;
+        state.shape = shape;
+        state.modeLockedUntil = performance.now() + 420;
+        const target = getTargets(shape);
+        targets.set(target);
+        if (explode) burst(shape === "heart" ? 1.75 : 1.25);
+        const label = labels[shape] || labels.sphere;
+        gestureName.textContent = label[0];
+        gestureHint.textContent = label[1];
+        buttons.forEach((button) => button.classList.toggle("active", button.dataset.shape === shape));
+      }
+
+      function getTargets(shape) {
+        if (targetCache.has(shape)) return targetCache.get(shape);
+        const out = new Float32Array(COUNT * 3);
+        if (shape === "sphere") fillSphere(out);
+        if (shape === "ring") fillRing(out);
+        if (shape === "heart") fillHeart(out);
+        if (shape === "star") fillStar(out);
+        if (shape === "flower") fillFlower(out);
+        if (shape === "text") fillText(out, "喜欢你");
+        targetCache.set(shape, out);
+        return out;
+      }
+
+      function fillSphere(out) {
+        const golden = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < COUNT; i++) {
+          const y = 1 - (i / (COUNT - 1)) * 2;
+          const radius = Math.sqrt(1 - y * y);
+          const theta = golden * i;
+          const shell = 5.4 + Math.sin(i * .17) * .24;
+          const k = i * 3;
+          out[k] = Math.cos(theta) * radius * shell;
+          out[k + 1] = y * shell;
+          out[k + 2] = Math.sin(theta) * radius * shell;
+        }
+      }
+
+      function fillRing(out) {
+        for (let i = 0; i < COUNT; i++) {
+          const u = i / COUNT * Math.PI * 2 * 7.0;
+          const v = (i * 0.61803398875 % 1) * Math.PI * 2;
+          const major = 5.2 + Math.sin(u * 2.0) * .18;
+          const minor = 1.05 + Math.sin(i * .031) * .14;
+          const k = i * 3;
+          out[k] = (major + minor * Math.cos(v)) * Math.cos(u);
+          out[k + 1] = minor * Math.sin(v) * 1.05;
+          out[k + 2] = (major + minor * Math.cos(v)) * Math.sin(u) * .58;
+        }
+      }
+
+      function fillHeart(out) {
+        for (let i = 0; i < COUNT; i++) {
+          const t = ((i * 0.61803398875) % 1) * Math.PI * 2;
+          const r = Math.sqrt((i * 0.754877666) % 1);
+          const x = 16 * Math.pow(Math.sin(t), 3);
+          const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+          const k = i * 3;
+          out[k] = x * .34 * r;
+          out[k + 1] = (y * .34 - 1.6) * r;
+          out[k + 2] = (((i * 0.56984029) % 1) - .5) * (1.4 + (1 - r) * 1.2);
+        }
+      }
+
+      function fillStar(out) {
+        for (let i = 0; i < COUNT; i++) {
+          const arm = i % 5;
+          const t = Math.floor(i / 5) / Math.ceil(COUNT / 5);
+          const angle = arm / 5 * Math.PI * 2 + t * .95;
+          const radius = (1 - Math.pow(t, 1.8)) * 6.4 + .35;
+          const spread = Math.sin(t * Math.PI) * .65;
+          const k = i * 3;
+          out[k] = Math.cos(angle) * radius + (Math.random() - .5) * spread;
+          out[k + 1] = Math.sin(angle) * radius + (Math.random() - .5) * spread;
+          out[k + 2] = (t - .5) * 6 + Math.sin(angle * 2) * .7;
+        }
+      }
+
+      function fillFlower(out) {
+        for (let i = 0; i < COUNT; i++) {
+          const t = i / COUNT * Math.PI * 2 * 24;
+          const petal = 3.2 + 2.8 * Math.abs(Math.sin(5 * t));
+          const r = petal * Math.sqrt((i % 691) / 691);
+          const k = i * 3;
+          out[k] = Math.cos(t) * r;
+          out[k + 1] = Math.sin(t) * r;
+          out[k + 2] = Math.sin(5 * t) * 1.2 + Math.cos(i * .02) * .4;
+        }
+      }
+
+      function fillText(out, text) {
+        const canvas = document.createElement("canvas");
+        canvas.width = 960;
+        canvas.height = 300;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "white";
+        ctx.font = "900 184px PingFang SC, Microsoft YaHei, sans-serif";
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+        ctx.font = "700 42px PingFang SC, Microsoft YaHei, sans-serif";
+        ctx.fillText("MY TINY GALAXY", canvas.width / 2, 252);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        const points = [];
+        for (let y = 0; y < canvas.height; y += 4) {
+          for (let x = 0; x < canvas.width; x += 4) {
+            const a = pixels[(y * canvas.width + x) * 4 + 3];
+            if (a > 64) points.push([x, y, a / 255]);
+          }
+        }
+        for (let i = 0; i < COUNT; i++) {
+          const p = points[(i * 37) % points.length];
+          const k = i * 3;
+          out[k] = (p[0] / canvas.width - .5) * 16.2 + (Math.random() - .5) * .03;
+          out[k + 1] = -(p[1] / canvas.height - .5) * 5.8 + (Math.random() - .5) * .03;
+          out[k + 2] = (Math.random() - .5) * (1.2 + p[2] * .8);
+        }
+      }
+
+      function randomShell(radius) {
+        const u = Math.random();
+        const v = Math.random();
+        const theta = u * Math.PI * 2;
+        const phi = Math.acos(2 * v - 1);
+        return new THREE.Vector3(
+          radius * Math.sin(phi) * Math.cos(theta),
+          radius * Math.sin(phi) * Math.sin(theta),
+          radius * Math.cos(phi)
+        );
+      }
+
+      function burst(power) {
+        for (let i = 0; i < COUNT; i++) {
+          const k = i * 3;
+          tmp.set(positions[k], positions[k + 1], positions[k + 2]).normalize();
+          velocities[k] += tmp.x * (9 + Math.random() * 15) * power;
+          velocities[k + 1] += tmp.y * (9 + Math.random() * 15) * power;
+          velocities[k + 2] += tmp.z * (9 + Math.random() * 15) * power;
+        }
+      }
+
+      function storm(power) {
+        const spin = power * (8 + Math.random() * 3);
+        for (let i = 0; i < COUNT; i += 1) {
+          const k = i * 3;
+          tmp.set(positions[k], positions[k + 1], positions[k + 2]);
+          tmp2.set(-tmp.y, tmp.x, Math.sin(seeds[i]) * 2).normalize();
+          velocities[k] += tmp2.x * spin * (Math.random() + .5);
+          velocities[k + 1] += tmp2.y * spin * (Math.random() + .5);
+          velocities[k + 2] += tmp2.z * spin * (Math.random() + .5);
+        }
+      }
+
+      function makeStarField(n) {
+        const geo = new THREE.BufferGeometry();
+        const pos = new Float32Array(n * 3);
+        const col = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) {
+          const p = randomShell(36 + Math.random() * 18);
+          const k = i * 3;
+          pos[k] = p.x;
+          pos[k + 1] = p.y;
+          pos[k + 2] = p.z;
+          const c = palette[i % palette.length].clone().lerp(new THREE.Color("#ffffff"), .55);
+          col[k] = c.r;
+          col[k + 1] = c.g;
+          col[k + 2] = c.b;
+        }
+        geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+        return new THREE.Points(geo, new THREE.PointsMaterial({
+          size: .045,
+          transparent: true,
+          opacity: .72,
+          vertexColors: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        }));
+      }
+
+      function bootHands() {
+        if (!window.Hands || !window.Camera) {
+          gestureName.textContent = "离线演示";
+          gestureHint.textContent = "CDN 未加载，可用按钮切换";
+          toast.textContent = "如果摄像头识别没启动，请联网后重新打开这个 HTML。";
+          return;
+        }
+
+        const hands = new Hands({
+          locateFile: (file) => `./vendor/${file}`
+        });
+        hands.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 1,
+          minDetectionConfidence: 0.72,
+          minTrackingConfidence: 0.68
+        });
+        hands.onResults(onHands);
+
+        const cam = new Camera(video, {
+          onFrame: async () => {
+            await hands.send({ image: video });
+          },
+          width: 640,
+          height: 480
+        });
+
+        cam.start().then(() => {
+          gestureName.textContent = "等待手势";
+          gestureHint.textContent = "把手放进右下角小画面";
+          setTimeout(() => toast.style.opacity = ".34", 3200);
+        }).catch(() => {
+          gestureName.textContent = "摄像头未授权";
+          gestureHint.textContent = "下方按钮仍可演示";
+          toast.textContent = "浏览器需要摄像头权限。你也可以直接用按钮切换形态。";
+        });
+      }
+
+      function onHands(results) {
+        const landmarks = results.multiHandLandmarks && results.multiHandLandmarks[0];
+        if (!landmarks) {
+          state.handSpeed *= .94;
+          state.targetScale += (1 - state.targetScale) * .08;
+          return;
+        }
+
+        const palm = landmarks[9];
+        const now = performance.now();
+        const worldX = (.5 - palm.x) * 18;
+        const worldY = (.5 - palm.y) * 11;
+        const worldZ = 2.5 - palm.z * 16;
+        pointer.set(worldX, worldY, worldZ);
+
+        const minX = Math.min(...landmarks.map((p) => p.x));
+        const maxX = Math.max(...landmarks.map((p) => p.x));
+        const minY = Math.min(...landmarks.map((p) => p.y));
+        const maxY = Math.max(...landmarks.map((p) => p.y));
+        const area = Math.max(.001, (maxX - minX) * (maxY - minY));
+        state.targetScale = THREE.MathUtils.clamp(1.26 - area * 2.8, .62, 1.45);
+
+        if (state.lastPalm) {
+          const dt = Math.max(16, now - state.lastPalm.t) / 1000;
+          const dx = palm.x - state.lastPalm.x;
+          const dy = palm.y - state.lastPalm.y;
+          const speed = Math.sqrt(dx * dx + dy * dy) / dt;
+          state.handSpeed = state.handSpeed * .72 + speed * .28;
+          if (speed > 2.15) storm(Math.min(speed * .24, 1.5));
+        }
+        state.lastPalm = { x: palm.x, y: palm.y, t: now };
+
+        if (now < state.manualUntil) return;
+        const gesture = classifyGesture(landmarks, results.multiHandedness && results.multiHandedness[0]);
+        if (gesture && gesture !== state.lastGesture && now > state.modeLockedUntil) {
+          state.lastGesture = gesture;
+          setShape(gesture, true);
+        }
+      }
+
+      function classifyGesture(lm, handedness) {
+        const handed = handedness && handedness.label === "Left" ? -1 : 1;
+        const extended = [];
+        extended[1] = handed > 0 ? lm[4].x < lm[3].x - .025 : lm[4].x > lm[3].x + .025;
+        extended[2] = lm[8].y < lm[6].y - .025;
+        extended[3] = lm[12].y < lm[10].y - .025;
+        extended[4] = lm[16].y < lm[14].y - .02;
+        extended[5] = lm[20].y < lm[18].y - .02;
+
+        const upCount = [1, 2, 3, 4, 5].filter((i) => extended[i]).length;
+        const pinch = distance2(lm[4], lm[8]) < .0032;
+        const thumbUp = lm[4].y < lm[3].y - .07 && !extended[2] && !extended[3] && !extended[4] && !extended[5];
+
+        if (pinch) return "flower";
+        if (thumbUp) return "heart";
+        if (upCount >= 4) return "sphere";
+        if (extended[2] && extended[3] && !extended[4] && !extended[5]) return "text";
+        if (extended[2] && !extended[3] && !extended[4] && !extended[5]) return "star";
+        if (upCount <= 1) return "ring";
+        return "";
+      }
+
+      function distance2(a, b) {
+        const x = a.x - b.x;
+        const y = a.y - b.y;
+        const z = (a.z || 0) - (b.z || 0);
+        return x * x + y * y + z * z;
+      }
+    })();
+  </script>
+</body>
+</html>

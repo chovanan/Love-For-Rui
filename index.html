@@ -108,19 +108,6 @@
       line-height: 1.35;
     }
 
-    .dock {
-      position: fixed;
-      left: 50%;
-      bottom: max(18px, env(safe-area-inset-bottom));
-      z-index: 12;
-      width: min(780px, calc(100vw - 28px));
-      transform: translateX(-50%);
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 8px;
-      pointer-events: auto;
-    }
-
     button {
       min-width: 0;
       height: 44px;
@@ -158,6 +145,50 @@
       background: rgba(255, 255, 255, .06);
       opacity: .82;
       box-shadow: 0 20px 60px rgba(0, 0, 0, .34);
+    }
+
+    .camera-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(10, 10, 20, .72);
+      backdrop-filter: blur(14px);
+      text-align: center;
+      color: rgba(255, 255, 255, .84);
+      transition: opacity .2s ease;
+    }
+
+    .camera-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .camera-overlay p {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .camera-start {
+      width: 100%;
+      max-width: 124px;
+      height: 36px;
+      background: rgba(255, 255, 255, .92);
+      color: #13141d;
+      border: 0;
+      box-shadow: none;
+      font-weight: 700;
+    }
+
+    .camera-start:hover {
+      background: white;
+      border-color: transparent;
+      transform: translateY(-1px);
     }
 
     video {
@@ -200,10 +231,6 @@
         min-width: 128px;
       }
 
-      .dock {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
       .camera {
         width: 120px;
         bottom: max(122px, calc(env(safe-area-inset-bottom) + 122px));
@@ -220,7 +247,6 @@
   <div class="hud">
     <div class="title">
       <h1>给你的粒子宇宙</h1>
-      <p>张开手、比耶、握拳、竖食指、点赞，粒子会用物理方式炸开再聚合。</p>
     </div>
     <div class="status" aria-live="polite">
       <strong id="gestureName">正在启动</strong>
@@ -228,23 +254,17 @@
     </div>
   </div>
 
-  <div class="dock" aria-label="手动切换形态">
-    <button data-shape="sphere">张手 星球</button>
-    <button data-shape="text">比耶 情话</button>
-    <button data-shape="ring">握拳 圆环</button>
-    <button data-shape="star">食指 星星</button>
-    <button data-shape="heart">点赞 爱心</button>
-    <button data-shape="flower">捏合 花</button>
-  </div>
-
   <div class="camera">
     <video id="video" autoplay playsinline muted></video>
+    <div class="camera-overlay" id="cameraOverlay">
+      <button class="camera-start" id="cameraStart" type="button">启用摄像头</button>
+      <p id="cameraMessage">手机上先点一下，再允许前置摄像头。</p>
+    </div>
   </div>
   <div class="toast" id="toast">摄像头不可用时，也可以用下方按钮手动切换。鼠标或手指拖动会吹散粒子。</div>
 
   <script src="./vendor/three.min.js"></script>
   <script src="./vendor/hands.js"></script>
-  <script src="./vendor/camera_utils.js"></script>
   <script>
     (() => {
       const COUNT = 16000;
@@ -257,16 +277,9 @@
       const gestureName = document.querySelector("#gestureName");
       const gestureHint = document.querySelector("#gestureHint");
       const toast = document.querySelector("#toast");
-      const buttons = [...document.querySelectorAll("button[data-shape]")];
-
-      const labels = {
-        sphere: ["张手：星球", "掌心靠近会把宇宙推近"],
-        text: ["比耶：情话", "她会看到一行藏在光里的话"],
-        ring: ["握拳：圆环", "攥紧后粒子收束成守护环"],
-        star: ["食指：星星", "指尖像魔法棒一样牵引星光"],
-        heart: ["点赞：爱心", "爱心会轻轻呼吸"],
-        flower: ["捏合：花", "拇指和食指靠近时开花"]
-      };
+      const cameraOverlay = document.querySelector("#cameraOverlay");
+      const cameraStart = document.querySelector("#cameraStart");
+      const cameraMessage = document.querySelector("#cameraMessage");
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x07070e, 0.035);
@@ -367,7 +380,6 @@
 
       const state = {
         shape: "sphere",
-        nextShape: "sphere",
         lastGesture: "",
         hand: null,
         handSpeed: 0,
@@ -375,7 +387,11 @@
         targetScale: 1,
         modeLockedUntil: 0,
         lastPalm: null,
-        manualUntil: 0
+        manualUntil: 0,
+        hands: null,
+        stream: null,
+        sendingFrame: false,
+        cameraStarted: false
       };
 
       const targetCache = new Map();
@@ -385,12 +401,7 @@
       animate();
 
       function bindInput() {
-        buttons.forEach((button) => {
-          button.addEventListener("click", () => {
-            state.manualUntil = performance.now() + 2600;
-            setShape(button.dataset.shape, true);
-          });
-        });
+        cameraStart.addEventListener("click", startCameraFlow);
 
         const setPointer = (clientX, clientY, strength = 1) => {
           pointer.x = (clientX / innerWidth - .5) * 24;
@@ -486,10 +497,10 @@
         const target = getTargets(shape);
         targets.set(target);
         if (explode) burst(shape === "heart" ? 1.75 : 1.25);
-        const label = labels[shape] || labels.sphere;
-        gestureName.textContent = label[0];
-        gestureHint.textContent = label[1];
-        buttons.forEach((button) => button.classList.toggle("active", button.dataset.shape === shape));
+        if (state.cameraStarted) {
+          gestureName.textContent = "正在感应";
+          gestureHint.textContent = "再靠近一点，星尘会跟着你动";
+        }
       }
 
       function getTargets(shape) {
@@ -663,41 +674,78 @@
       }
 
       function bootHands() {
-        if (!window.Hands || !window.Camera) {
+        if (!window.Hands) {
           gestureName.textContent = "离线演示";
-          gestureHint.textContent = "CDN 未加载，可用按钮切换";
+          gestureHint.textContent = "手势模块未加载，可用按钮切换";
           toast.textContent = "如果摄像头识别没启动，请联网后重新打开这个 HTML。";
+          cameraMessage.textContent = "手势模块没有加载成功。";
           return;
         }
 
-        const hands = new Hands({
+        state.hands = new Hands({
           locateFile: (file) => `./vendor/${file}`
         });
-        hands.setOptions({
+        state.hands.setOptions({
           maxNumHands: 1,
           modelComplexity: 1,
           minDetectionConfidence: 0.72,
           minTrackingConfidence: 0.68
         });
-        hands.onResults(onHands);
+        state.hands.onResults(onHands);
+        gestureName.textContent = "点击启用摄像头";
+        gestureHint.textContent = "让前置镜头看到你的手";
+        toast.textContent = "如果手机上没弹权限框，先点右下角小窗里的启用摄像头。";
+      }
 
-        const cam = new Camera(video, {
-          onFrame: async () => {
-            await hands.send({ image: video });
-          },
-          width: 640,
-          height: 480
-        });
+      async function startCameraFlow() {
+        if (!state.hands) return;
+        if (state.cameraStarted) return;
+        cameraStart.disabled = true;
+        cameraStart.textContent = "启动中";
+        cameraMessage.textContent = "稍等一下，我在连接前置摄像头。";
 
-        cam.start().then(() => {
-          gestureName.textContent = "等待手势";
-          gestureHint.textContent = "把手放进右下角小画面";
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: "user",
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            }
+          });
+          state.stream = stream;
+          video.srcObject = stream;
+          await video.play();
+          state.cameraStarted = true;
+          cameraOverlay.classList.add("hidden");
+          gestureName.textContent = "等待你";
+          gestureHint.textContent = "把手放进右下角小窗里";
+          toast.textContent = "靠近镜头一点，粒子会开始回应。";
           setTimeout(() => toast.style.opacity = ".34", 3200);
-        }).catch(() => {
-          gestureName.textContent = "摄像头未授权";
+          requestAnimationFrame(processVideoFrame);
+        } catch (error) {
+          cameraStart.disabled = false;
+          cameraStart.textContent = "重试摄像头";
+          gestureName.textContent = "摄像头未启动";
           gestureHint.textContent = "下方按钮仍可演示";
-          toast.textContent = "浏览器需要摄像头权限。你也可以直接用按钮切换形态。";
-        });
+          cameraMessage.textContent = error && error.name === "NotAllowedError"
+            ? "你刚刚拒绝了权限，去浏览器地址栏里把摄像头改成允许。"
+            : "手机没有成功打开前置摄像头，再点一次试试。";
+          toast.textContent = "手机浏览器里需要允许摄像头，建议用 Safari 或 Chrome 打开。";
+        }
+      }
+
+      async function processVideoFrame() {
+        if (!state.cameraStarted || !state.hands) return;
+        if (video.readyState >= 2 && !state.sendingFrame) {
+          state.sendingFrame = true;
+          try {
+            await state.hands.send({ image: video });
+          } finally {
+            state.sendingFrame = false;
+          }
+        }
+        requestAnimationFrame(processVideoFrame);
       }
 
       function onHands(results) {

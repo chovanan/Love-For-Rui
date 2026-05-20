@@ -775,6 +775,8 @@
         if (!landmarks) {
           state.handSpeed *= .94;
           state.targetScale += (1 - state.targetScale) * .08;
+          gestureName.textContent = "等待你";
+          gestureHint.textContent = "把手放进右下角小窗里";
           return;
         }
 
@@ -801,6 +803,8 @@
           if (speed > 2.15) storm(Math.min(speed * .24, 1.5));
         }
         state.lastPalm = { x: palm.x, y: palm.y, t: now };
+        gestureName.textContent = "正在感应";
+        gestureHint.textContent = "慢一点会更容易认出来";
 
         if (now < state.manualUntil) return;
         const gesture = classifyGesture(landmarks, results.multiHandedness && results.multiHandedness[0]);
@@ -812,24 +816,37 @@
 
       function classifyGesture(lm, handedness) {
         const handed = handedness && handedness.label === "Left" ? -1 : 1;
-        const extended = [];
-        extended[1] = handed > 0 ? lm[4].x < lm[3].x - .025 : lm[4].x > lm[3].x + .025;
-        extended[2] = lm[8].y < lm[6].y - .025;
-        extended[3] = lm[12].y < lm[10].y - .025;
-        extended[4] = lm[16].y < lm[14].y - .02;
-        extended[5] = lm[20].y < lm[18].y - .02;
-
-        const upCount = [1, 2, 3, 4, 5].filter((i) => extended[i]).length;
-        const pinch = distance2(lm[4], lm[8]) < .0032;
-        const thumbUp = lm[4].y < lm[3].y - .07 && !extended[2] && !extended[3] && !extended[4] && !extended[5];
+        const palmSize = Math.max(
+          .06,
+          Math.sqrt(distance2(lm[0], lm[9])),
+          Math.sqrt(distance2(lm[5], lm[17]))
+        );
+        const wrist = lm[0];
+        const indexOpen = fingerOpen(lm[8], lm[6], wrist, palmSize, "y");
+        const middleOpen = fingerOpen(lm[12], lm[10], wrist, palmSize, "y");
+        const ringOpen = fingerOpen(lm[16], lm[14], wrist, palmSize, "y");
+        const pinkyOpen = fingerOpen(lm[20], lm[18], wrist, palmSize, "y");
+        const thumbReach = Math.abs(lm[4].x - lm[2].x) / palmSize;
+        const thumbOpen = handed > 0 ? lm[4].x < lm[3].x - palmSize * .18 : lm[4].x > lm[3].x + palmSize * .18;
+        const extended = [false, thumbOpen || thumbReach > .42, indexOpen, middleOpen, ringOpen, pinkyOpen];
+        const upCount = extended.filter(Boolean).length;
+        const pinch = Math.sqrt(distance2(lm[4], lm[8])) / palmSize < .42;
+        const thumbUp = lm[4].y < lm[3].y - palmSize * .38 && !indexOpen && !middleOpen && !ringOpen && !pinkyOpen;
 
         if (pinch) return "flower";
         if (thumbUp) return "heart";
+        if (indexOpen && middleOpen && !ringOpen && !pinkyOpen) return "text";
+        if (indexOpen && !middleOpen && !ringOpen && !pinkyOpen) return "star";
         if (upCount >= 4) return "sphere";
-        if (extended[2] && extended[3] && !extended[4] && !extended[5]) return "text";
-        if (extended[2] && !extended[3] && !extended[4] && !extended[5]) return "star";
         if (upCount <= 1) return "ring";
         return "";
+      }
+
+      function fingerOpen(tip, pip, wrist, palmSize, axis) {
+        const tipProgress = axis === "y" ? wrist.y - tip.y : tip.x - wrist.x;
+        const pipProgress = axis === "y" ? wrist.y - pip.y : pip.x - wrist.x;
+        const reach = Math.sqrt(distance2(tip, wrist)) / palmSize;
+        return tipProgress > pipProgress + palmSize * .12 && reach > 1.15;
       }
 
       function distance2(a, b) {

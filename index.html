@@ -280,6 +280,7 @@
       const cameraOverlay = document.querySelector("#cameraOverlay");
       const cameraStart = document.querySelector("#cameraStart");
       const cameraMessage = document.querySelector("#cameraMessage");
+      const ua = navigator.userAgent || "";
 
       const scene = new THREE.Scene();
       scene.fog = new THREE.FogExp2(0x07070e, 0.035);
@@ -399,6 +400,23 @@
       bootHands();
       bindInput();
       animate();
+
+      function isEmbeddedBrowser() {
+        return /MicroMessenger|QQ\/|Weibo|BytedanceWebview|MiuiBrowser|HeyTapBrowser/i.test(ua);
+      }
+
+      function browserOpenHint() {
+        if (/MicroMessenger/i.test(ua)) {
+          return "如果你是在微信里打开，点右上角菜单，用系统浏览器打开。";
+        }
+        if (/QQ\//i.test(ua)) {
+          return "如果你是在 QQ 里打开，点右上角菜单，用浏览器打开。";
+        }
+        if (/Weibo/i.test(ua)) {
+          return "如果你是在微博里打开，点右上角菜单，用浏览器打开。";
+        }
+        return "手机浏览器里需要允许摄像头，建议用 Safari 或 Chrome 打开。";
+      }
 
       function bindInput() {
         cameraStart.addEventListener("click", startCameraFlow);
@@ -694,7 +712,9 @@
         state.hands.onResults(onHands);
         gestureName.textContent = "点击启用摄像头";
         gestureHint.textContent = "让前置镜头看到你的手";
-        toast.textContent = "如果手机上没弹权限框，先点右下角小窗里的启用摄像头。";
+        toast.textContent = isEmbeddedBrowser()
+          ? browserOpenHint()
+          : "如果手机上没弹权限框，先点右下角小窗里的启用摄像头。";
       }
 
       async function startCameraFlow() {
@@ -730,8 +750,10 @@
           gestureHint.textContent = "下方按钮仍可演示";
           cameraMessage.textContent = error && error.name === "NotAllowedError"
             ? "你刚刚拒绝了权限，去浏览器地址栏里把摄像头改成允许。"
-            : "手机没有成功打开前置摄像头，再点一次试试。";
-          toast.textContent = "手机浏览器里需要允许摄像头，建议用 Safari 或 Chrome 打开。";
+            : isEmbeddedBrowser()
+              ? browserOpenHint()
+              : "手机没有成功打开前置摄像头，再点一次试试。";
+          toast.textContent = isEmbeddedBrowser() ? browserOpenHint() : "手机浏览器里需要允许摄像头，建议用 Safari 或 Chrome 打开。";
         }
       }
 
